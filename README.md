@@ -26,6 +26,7 @@ Launch the command via php or docker and use these parameters:
                 Short language code: en for english, es for spanish, etc.
     --native    Your native language
                 Short language code: en for english, es for spanish, etc.
+    --output    Optional: output format csv (default) or json
 
 All parameters are mandatory
 

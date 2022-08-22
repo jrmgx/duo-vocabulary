@@ -7,7 +7,7 @@ use Symfony\Component\HttpClient\HttpClient;
 const BASE_URL = "https://www.duolingo.com";
 const API_URL = "https://d2.duolingo.com/api/1";
 
-$options = getopt('', ['login:','password:','learning:','native:']);
+$options = getopt('', ['login:','password:','learning:','native:','output:']);
 if (
     !array_key_exists('login', $options) ||
     !array_key_exists('password', $options) ||
@@ -23,8 +23,7 @@ Usage: $argv[0] [options]
                 Short language code: en for english, es for spanish, etc.
     --native    Your native language
                 Short language code: en for english, es for spanish, etc.
-
-All options are mandatory
+    --output    Optional: output format csv (default) or json
 
 USAGE;
     exit(1);
@@ -34,15 +33,32 @@ $login = $options['login'];
 $password = $options['password'];
 $source = $options['learning'];
 $dest = $options['native'];
+$output = $options['output'] ?? 'csv';
 
 /**
  * This function combines the array representing a word (with details)
  * plus the array of translations to a line in our output file.
  */
-function transform(array $item, ?array $translate): array {
+function transformToCsv(array $item, ?array $translate): array {
     return [
         strtolower($item['word_string'].'<br/>('.$item['pos'].(!empty($item['infinitive'])?' : '.$item['infinitive']:'').')'),
         strtolower($translate === null ? '??' : implode('<br/>', $translate)),
+    ];
+}
+
+/**
+ * This function combines the array representing a word (with details)
+ * plus the array of translations to an entry in our final json.
+ */
+function transformToJson(array $item, ?array $translate): array {
+    $translate = ($translate ?? ['??']);
+    $translation = array_shift($translate);
+    return [
+        'word' => $item['word_string'],
+        'translation' => $translation,
+        'details' =>
+            (!empty($translate) ? 'Also: ' . implode(' / ', $translate) . ' ' : '').
+            '('.$item['pos'].(!empty($item['infinitive'])?': '.$item['infinitive']:'').')',
     ];
 }
 
@@ -114,11 +130,17 @@ if (empty($translate)) {
     throw new Exception('Fatal error when getting /dictionary/hints');
 }
 
-$final = array_map(fn ($item) => transform($details[$item], $translate[$item]), $words);
 
 $fileDescriptor = fopen('php://stdout', 'w');
-foreach ($final as $line) {
-    fputcsv($fileDescriptor, $line);
-}
+if ($output === 'json') {
+    $final = array_map(fn ($item) => transformToJson($details[$item], $translate[$item]), $words);
+    $data = json_encode($final);
+    fputs($fileDescriptor, $data);
+} else {
+    $final = array_map(fn ($item) => transformToCsv($details[$item], $translate[$item]), $words);
+    foreach ($final as $line) {
+        fputcsv($fileDescriptor, $line);
+    }
 
+}
 fclose($fileDescriptor);
